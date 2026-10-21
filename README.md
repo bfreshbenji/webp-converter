@@ -1,6 +1,6 @@
 # WebP Converter
 
-Turn JPG, PNG and other images into small WebP files for websites,
+Turn JPG, PNG, HEIC (iPhone photos) and other images into small WebP files for websites,
 or turn WebP files back into PNG.
 It runs in your browser: no uploads, no sign-up, no limits.
 
@@ -19,4 +19,6 @@ It runs in your browser: no uploads, no sign-up, no limits.
 ## Use it without internet
 
 Download `index.html` from this repo and double-click it. It opens in your browser
-and converts images the same way.
+and converts images the same way. HEIC files are the exception: the HEIC reader
+downloads the first time you add one, so they need an internet connection
+(except in Safari, which reads HEIC on its own).

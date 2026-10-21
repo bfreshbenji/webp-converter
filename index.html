@@ -180,7 +180,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 <div class="wrap">
   <header>
     <h1>WebP <span>Converter</span></h1>
-    <p class="lede">Turn JPG, PNG, GIF, BMP and AVIF images into lightweight WebP files for your websites, or turn WebP files back into PNG. Everything runs in your browser, so there are no upload limits and your images never leave your device.</p>
+    <p class="lede">Turn JPG, PNG, HEIC (iPhone photos), GIF, BMP and AVIF images into lightweight WebP files for your websites, or turn WebP files back into PNG. Everything runs in your browser, so there are no upload limits and your images never leave your device.</p>
   </header>
 
   <div class="layout">
@@ -221,7 +221,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <strong>Drop images here</strong>
         <p>or paste from your clipboard</p>
         <button class="btn primary" id="pick" type="button">Choose images</button>
-        <input id="fileInput" type="file" accept="image/*" multiple hidden>
+        <input id="fileInput" type="file" accept="image/*,.heic,.heif" multiple hidden>
       </div>
 
       <div class="summary" id="summary">
@@ -291,6 +291,28 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     });
   }
 
+  // HEIC (iPhone photos) only opens natively in Safari, so other browsers load a HEIC reader the first time one is added.
+  const isHeicFile = (f) => /^image\/hei[cf]/i.test(f.type) || /\.(heic|heif)$/i.test(f.name);
+  let heicLib = null;
+  function loadHeicReader() {
+    if (!heicLib) {
+      heicLib = import("https://cdn.jsdelivr.net/npm/heic-to@1.6.5/dist/csp/heic-to.min.js").catch(() => {
+        heicLib = null;
+        throw new Error("Couldn't load the HEIC reader. Check your internet connection and add the file again.");
+      });
+    }
+    return heicLib;
+  }
+  async function decodeAny(file) {
+    if (!isHeicFile(file)) return decode(file);
+    try { return await decode(file); } catch (e) { /* not Safari; use the HEIC reader */ }
+    const { heicTo } = await loadHeicReader();
+    let png;
+    try { png = await heicTo({ blob: file, type: "image/png" }); }
+    catch (e) { throw new Error("Couldn't read this HEIC file. It may be damaged or use an unsupported variant."); }
+    return decode(png);
+  }
+
   function encode(img, format, quality, maxWidth) {
     const w0 = img.naturalWidth || 1, h0 = img.naturalHeight || 1;
     const scale = maxWidth && w0 > maxWidth ? maxWidth / w0 : 1;
@@ -309,18 +331,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
 
   async function addFiles(files, { example = false } = {}) {
-    const images = [...files].filter((f) => f.type.startsWith("image/") || /\.(avif|heic|bmp|svg)$/i.test(f.name));
+    const images = [...files].filter((f) => f.type.startsWith("image/") || /\.(avif|heic|heif|bmp|svg)$/i.test(f.name));
     if (!images.length) { if (!example) toast("Those files aren't images."); return; }
     if (!example) removeExamples();
-    for (const file of images) {
-      const item = { id: nextId++, file, name: file.name, origSize: file.size, status: "working", example };
-      state.items.push(item);
+    const added = images.map((file) => ({ id: nextId++, file, name: file.name, origSize: file.size, status: "working", example }));
+    state.items.push(...added);
+    render(); // show rows straight away; HEIC files can take a moment to read
+    for (const item of added) {
       try {
-        item.img = await decode(file);
+        item.img = await decodeAny(item.file);
         item.w = item.img.naturalWidth; item.h = item.img.naturalHeight;
       } catch (e) { item.status = "error"; item.err = e.message; }
+      renderRow(item);
     }
-    render();
     convertAll();
   }
 
@@ -357,7 +380,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (item.status === "error") {
       sub = `<span class="err">${escapeHtml(item.err)}</span>`;
     } else if (item.status === "working" || !item.out) {
-      sub = `${fmtBytes(item.origSize)} · converting…`;
+      sub = `${fmtBytes(item.origSize)} · ${item.img ? "converting…" : "reading…"}`;
     } else {
       const dims = item.outW !== item.w ? `${item.w}×${item.h} → ${item.outW}×${item.outH}` : `${item.w}×${item.h}`;
       sub = `${fmtBytes(item.origSize)} → ${fmtBytes(item.out.size)} · ${dims}`;
