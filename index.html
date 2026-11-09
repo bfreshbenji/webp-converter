@@ -145,7 +145,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 .pill.worse { background: var(--warn-soft); color: var(--warn); }
 .pill.neutral { background: var(--line); color: var(--muted); }
-.seg { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; gap: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; gap: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
 .seg button {
   font: 600 0.9rem var(--font-body); padding: 8px 0; border: 0; border-radius: 6px; cursor: pointer;
   background: transparent; color: var(--muted);
@@ -180,7 +180,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 <div class="wrap">
   <header>
     <h1>WebP <span>Converter</span></h1>
-    <p class="lede">Turn JPG, PNG, HEIC (iPhone photos), GIF, BMP and AVIF images into lightweight WebP files for your websites, or turn WebP files back into PNG. Everything runs in your browser, so there are no upload limits and your images never leave your device.</p>
+    <p class="lede">Turn JPG, PNG, HEIC (iPhone photos), GIF, BMP and AVIF images into lightweight WebP files for your websites, or turn WebP files back into JPG or PNG. Everything runs in your browser, so there are no upload limits and your images never leave your device.</p>
   </header>
 
   <div class="layout">
@@ -189,6 +189,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <span class="label" id="formatLabel">Convert to</span>
         <div class="seg" role="group" aria-labelledby="formatLabel" id="formatSeg">
           <button type="button" data-format="webp" aria-pressed="true">WebP</button>
+          <button type="button" data-format="jpg" aria-pressed="false">JPG</button>
           <button type="button" data-format="png" aria-pressed="false">PNG</button>
         </div>
         <p class="hint" id="formatHint">Smallest files, best for websites.</p>
@@ -251,6 +252,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   const state = { items: [], format: "webp", quality: 0.8, maxWidth: 0, run: 0 };
   const FORMATS = {
     webp: { ext: "webp", mime: "image/webp", label: "WebP", hint: "Smallest files, best for websites." },
+    jpg: { ext: "jpg", mime: "image/jpeg", label: "JPG", hint: "Opens anywhere. Transparent areas turn white." },
     png: { ext: "png", mime: "image/png", label: "PNG", hint: "Lossless and opens anywhere. Files are larger than WebP." },
   };
   let nextId = 1;
@@ -321,6 +323,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingQuality = "high";
+    if (format.mime === "image/jpeg") { ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); } // JPG has no transparency
     ctx.drawImage(img, 0, 0, w, h);
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -388,7 +391,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       const worse = pct < 0;
       // PNG is lossless, so growing is expected there rather than a problem to fix.
       const cls = !worse ? "" : item.outExt === "png" ? " neutral" : " worse";
-      const tip = !worse ? "Size saved" : item.outExt === "png" ? "PNG is lossless, so it is usually larger than WebP or JPG." : "WebP came out larger than the original. Try a lower quality.";
+      const tip = !worse ? "Size saved" : item.outExt === "png" ? "PNG is lossless, so it is usually larger than WebP or JPG." : `${item.outExt === "jpg" ? "JPG" : "WebP"} came out larger than the original. Try a lower quality.`;
       right = `<span class="pill${cls}" title="${tip}">${worse ? "+" + -pct : pct ? "−" + pct : "0"}%</span>
         <button class="btn" data-act="save" type="button">Download</button>`;
     }
@@ -468,7 +471,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const lossless = format === "png";
     els.quality.disabled = lossless;
     els.qualityField.classList.toggle("off", lossless);
-    els.qualityHint.textContent = lossless ? "PNG is lossless, so quality doesn't apply." : "75–85 suits most photos. 100 is lossless in Chrome and Edge.";
+    els.qualityHint.textContent = lossless ? "PNG is lossless, so quality doesn't apply." : format === "jpg" ? "75–90 suits most photos." : "75–85 suits most photos. 100 is lossless in Chrome and Edge.";
     try { localStorage.setItem("outputFormat", format); } catch (e) {}
   }
   els.formatSeg.addEventListener("click", (e) => {
@@ -501,7 +504,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       let name = outName(item), n = 2;
       while (used.has(name.toLowerCase())) name = `${baseName(item.name)}-${n++}.${item.outExt}`;
       used.add(name.toLowerCase());
-      zip.file(name, item.out); // WebP and PNG are already compressed, so store as-is
+      zip.file(name, item.out); // WebP, JPG and PNG are already compressed, so store as-is
     }
     els.zip.disabled = true;
     try { await saveBlob("converted-images.zip", await zip.generateAsync({ type: "blob", compression: "STORE" })); }
@@ -533,8 +536,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   try { saved = localStorage.getItem("outputFormat"); } catch (e) {}
   if (!webpSupported) {
     els.formatSeg.querySelector('[data-format="webp"]').disabled = true;
-    setFormat("png");
-    els.formatHint.textContent = "This browser can't create WebP files, so only PNG is available. Use Chrome, Edge or Firefox for WebP.";
+    setFormat(FORMATS[saved] && saved !== "webp" ? saved : "jpg");
+    els.formatHint.textContent = "This browser can't create WebP files, so only JPG and PNG are available. Use Chrome, Edge or Firefox for WebP.";
   } else {
     setFormat(FORMATS[saved] ? saved : "webp");
   }
